@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { enqueueSnackbar } from 'notistack'
 import type { ApiError } from '../types/error'
 
 export const api = axios.create({
@@ -11,12 +12,17 @@ api.interceptors.response.use(
   error => {
     const data = error?.response?.data as ApiError | undefined
 
-    // Ako backend vraća Problem Details → prosledi kako jeste
+    // Show error via notistack
+    enqueueSnackbar(data?.detail ?? error?.message ?? 'Unknown error', {
+      variant: 'error',
+    })
+
+    // If backend returns Problem Details → pass as is
     if (data && typeof data === 'object' && 'status' in data) {
       return Promise.reject(data)
     }
 
-    // Fallback za ne-standardne greške
+    // Fallback for non-standard errors
     const fallback: ApiError = {
       type: 'about:blank',
       title: 'Error',

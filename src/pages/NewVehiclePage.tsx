@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { useSnackbar } from 'notistack'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -13,28 +14,28 @@ import {
   Select,
   TextField,
   Typography,
-  Alert,
 } from '@mui/material'
 import { useCreateVehicle } from '../hooks/useCreateVehicle'
 import type { VehicleRequest, Fuel } from '../types/vehicle'
 
 const vehicleSchema = z.object({
   model: z
-    .string()
+    .string({ message: 'Model must be a text value' })
     .min(1, 'Model is required')
     .max(40, 'Model must be at most 40 characters'),
   firstRegistrationYear: z
-    .string()
+    .string({ message: 'First registration year must be a text value' })
+    .min(1, 'First registration year is required')
     .regex(/^\d{4}$/, 'First registration year must have exactly 4 digits'),
   cubicCapacity: z
-    .number()
-    .int('Cubic capacity must be an integer')
-    .positive('Cubic capacity must be positive')
+    .number({ message: 'Cubic capacity must be a number' })
+    .positive('Cubic capacity must be a positive number')
     .max(9999, 'Cubic capacity must be at most 9999'),
-  fuel: z.enum(['diesel', 'petrol', 'hybrid']),
+  fuel: z.enum(['diesel', 'petrol', 'hybrid'], {
+    message: 'Please select a valid fuel type (diesel, petrol, or hybrid)',
+  }),
   mileage: z
-    .number()
-    .int('Mileage must be an integer')
+    .number({ message: 'Mileage must be a number' })
     .min(0, 'Mileage must be greater than or equal to 0')
     .max(9999999, 'Mileage must be at most 9,999,999'),
 })
@@ -43,6 +44,7 @@ type VehicleFormData = z.infer<typeof vehicleSchema>
 
 export default function NewVehiclePage() {
   const navigate = useNavigate()
+  const { enqueueSnackbar } = useSnackbar()
   const { create, loading, error } = useCreateVehicle()
 
   const {
@@ -75,7 +77,17 @@ export default function NewVehiclePage() {
 
     const created = await create(payload)
     if (created) {
+      enqueueSnackbar('Vehicle created successfully', { variant: 'success' })
       navigate('/')
+    } else if (error) {
+      enqueueSnackbar(error.detail || error.title || 'Error creating vehicle', {
+        variant: 'error',
+      })
+      if (error.errors) {
+        Object.entries(error.errors).forEach(([field, message]) => {
+          enqueueSnackbar(`${field}: ${message}`, { variant: 'error' })
+        })
+      }
     }
   }
 
@@ -97,7 +109,7 @@ export default function NewVehiclePage() {
           color="success"
           type="submit"
           form="vehicle-form"
-          disabled={loading}
+          loading={loading}
           sx={{
             backgroundColor: '#4caf50',
             '&:hover': {
@@ -105,32 +117,15 @@ export default function NewVehiclePage() {
             },
           }}
         >
-          {loading ? 'Saving...' : 'Save'}
+          Save
         </Button>
       </Box>
-
-      {error && (
-        <Alert severity="error" sx={{ marginBottom: 3 }}>
-          {error.detail || error.title || 'Error creating vehicle'}
-          {error.errors && (
-            <Box
-              component="ul"
-              sx={{ marginTop: 1, marginBottom: 0, paddingLeft: 2 }}
-            >
-              {Object.entries(error.errors).map(([field, message]) => (
-                <li key={field}>
-                  {field}: {message}
-                </li>
-              ))}
-            </Box>
-          )}
-        </Alert>
-      )}
 
       <Box
         component="form"
         id="vehicle-form"
         onSubmit={handleSubmit(onSubmit)}
+        noValidate
         sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}
       >
         <Box
@@ -156,7 +151,7 @@ export default function NewVehiclePage() {
             error={!!errors.firstRegistrationYear}
             helperText={errors.firstRegistrationYear?.message}
             disabled={loading}
-            inputProps={{ maxLength: 4 }}
+            slotProps={{ htmlInput: { maxLength: 4 } }}
           />
 
           <TextField
@@ -167,16 +162,19 @@ export default function NewVehiclePage() {
             error={!!errors.cubicCapacity}
             helperText={errors.cubicCapacity?.message}
             disabled={loading}
-            inputProps={{ min: 1, max: 9999 }}
+            slotProps={{ htmlInput: { min: 1, max: 9999 } }}
           />
 
           <FormControl fullWidth error={!!errors.fuel} disabled={loading}>
             <InputLabel>Fuel</InputLabel>
             <Select
-              {...register('fuel')}
               value={fuelValue || ''}
               label="Fuel"
-              onChange={e => setValue('fuel', e.target.value as Fuel)}
+              onChange={e =>
+                setValue('fuel', e.target.value as Fuel, {
+                  shouldValidate: true,
+                })
+              }
             >
               <MenuItem value="diesel">Diesel</MenuItem>
               <MenuItem value="petrol">Petrol</MenuItem>
@@ -195,7 +193,7 @@ export default function NewVehiclePage() {
             error={!!errors.mileage}
             helperText={errors.mileage?.message}
             disabled={loading}
-            inputProps={{ min: 0, max: 9999999 }}
+            slotProps={{ htmlInput: { min: 0, max: 9999999 } }}
           />
         </Box>
       </Box>
