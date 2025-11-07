@@ -55,6 +55,12 @@ The application follows a component-based architecture with clear separation of 
 - Loading states and error handling
 - Empty state message when no vehicles are available
 - Summary stripe showing total number of vehicles returned by the backend
+- **Pagination filters** - Filter and search vehicles using the following options:
+  - **Page navigation** - Navigate between pages using pagination controls
+  - **Fuel filter** - Filter vehicles by fuel type (diesel, petrol, hybrid)
+  - **First registration year range** - Filter vehicles by registration year using a slider (range from 1900 to current year)
+  - **Model search** - Search vehicles by model name (debounced search with 500ms delay)
+  - All filters are synchronized with URL query parameters for shareable links and browser back/forward navigation
 
 #### Page 2: Add New Vehicle
 
