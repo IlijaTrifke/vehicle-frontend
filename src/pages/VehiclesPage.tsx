@@ -511,13 +511,13 @@ export default function VehiclesPage() {
                   First registration year
                 </TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>
-                  Cubic capacity
+                  Cubic capacity (cm³)
                 </TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>
                   Fuel
                 </TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>
-                  Mileage
+                  Mileage (km)
                 </TableCell>
                 <TableCell
                   sx={{ color: 'white', fontWeight: 'bold' }}
@@ -636,7 +636,8 @@ export default function VehiclesPage() {
                       {vehicle.firstRegistrationYear}
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 0.5 }}>
-                      <strong>Cubic Capacity:</strong> {vehicle.cubicCapacity}
+                      <strong>Cubic Capacity:</strong> {vehicle.cubicCapacity}{' '}
+                      cm³
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 0.5 }}>
                       <strong>Fuel:</strong> {formatFuel(vehicle.fuel)}

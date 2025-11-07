@@ -19,6 +19,10 @@ export function useVehicle(id: number): UseVehicleResult {
   const isMounted = useRef(true)
 
   const reload = useCallback(async () => {
+    if (id <= 0) {
+      return
+    }
+
     setLoading(true)
     setError(null)
     setNotFound(false)
