@@ -8,15 +8,25 @@ export interface ListVehiclesParams {
   page?: number
   size?: number
   sort?: string
+  fuel?: string
+  firstRegistrationYear?: string
+  modelSearch?: string
 }
 
 export async function listVehicles({
   page = 0,
   size = 10,
   sort,
+  fuel,
+  firstRegistrationYear,
+  modelSearch,
 }: ListVehiclesParams = {}): Promise<Page<Vehicle>> {
   const params: Record<string, number | string> = { page, size }
   if (sort) params.sort = sort
+  if (fuel) params.fuel = fuel
+  if (firstRegistrationYear)
+    params.firstRegistrationYear = firstRegistrationYear
+  if (modelSearch) params.modelSearch = modelSearch
 
   const res = await api.get<Page<Vehicle>>(`${BASE}/paged`, { params })
   return res.data

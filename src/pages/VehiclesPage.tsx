@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useSnackbar } from 'notistack'
 import {
@@ -11,42 +11,255 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  FormControl,
+  InputLabel,
   LinearProgress,
+  MenuItem,
   Pagination,
   Paper,
+  Select,
+  Slider,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Typography,
 } from '@mui/material'
 import { useVehicles } from '../hooks/useVehicles'
 import { seedVehicles } from '../api/vehicleApi'
 import { useDeleteVehicle } from '../hooks/useDeleteVehicle'
+import { useDebounce } from '../hooks/useDebounce'
 import type { Vehicle } from '../types/vehicle'
+import {
+  parseYearRange,
+  formatYearRange,
+  formatFuel,
+} from '../helpers/vehicleHelpers'
+
+// Constants
+const CURRENT_YEAR = new Date().getFullYear()
+const DEFAULT_RANGE: [number, number] = [1900, CURRENT_YEAR]
+
+// Types
+interface Filters {
+  page: number
+  modelSearch: string
+  fuel: string
+  yearRange: [number, number]
+}
 
 export default function VehiclesPage() {
+  // ========== Hooks ==========
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { enqueueSnackbar } = useSnackbar()
   const { vehicles, loading, error, setVehicles, page, reload } =
     useVehicles(false)
-
-  // Read page from URL, default to 1 if not present
-  const urlPage = Math.max(1, Number(searchParams.get('page') || '1') || 1)
   const {
     remove: deleteVehicle,
     loading: deleting,
     error: deleteError,
   } = useDeleteVehicle()
+
+  // ========== State ==========
+  // Dialog states
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [vehicleToDelete, setVehicleToDelete] = useState<number | null>(null)
   const [seedOpen, setSeedOpen] = useState(false)
   const [seeding, setSeeding] = useState(false)
 
+  // Filters state (single source of truth)
+  const [filters, setFilters] = useState<Filters>(() => {
+    const urlPage = Math.max(1, Number(searchParams.get('page') || '1') || 1)
+    const modelSearch = searchParams.get('modelSearch') || ''
+    const fuel = searchParams.get('fuel') || ''
+    const yearRange = parseYearRange(
+      searchParams.get('firstRegistrationYear') || '',
+      DEFAULT_RANGE,
+      CURRENT_YEAR
+    )
+    return { page: urlPage, modelSearch, fuel, yearRange }
+  })
+
+  // Raw model search for TextField (without debounce)
+  const [rawModelSearch, setRawModelSearch] = useState<string>(
+    searchParams.get('modelSearch') || ''
+  )
+
+  // Local state for slider during dragging (visual only, no API call)
+  const [sliderYearRange, setSliderYearRange] = useState<[number, number]>(
+    () => {
+      const yearRange = parseYearRange(
+        searchParams.get('firstRegistrationYear') || '',
+        DEFAULT_RANGE,
+        CURRENT_YEAR
+      )
+      return yearRange
+    }
+  )
+
+  // ========== Derived Values ==========
+  const debouncedModelSearch = useDebounce(rawModelSearch, 500)
+  const firstRegistrationYear = useMemo(
+    () => formatYearRange(filters.yearRange, DEFAULT_RANGE, CURRENT_YEAR),
+    [filters.yearRange]
+  )
+  const marks = useMemo(
+    () => [
+      { value: 1900, label: '1900' },
+      { value: CURRENT_YEAR, label: String(CURRENT_YEAR) },
+    ],
+    []
+  )
+
+  const prevPage = useRef(filters.page)
+
+  // ========== Effects ==========
+  useEffect(() => {
+    setSliderYearRange(filters.yearRange)
+  }, [filters.yearRange])
+
+  useEffect(() => {
+    setFilters(prev => {
+      if (prev.modelSearch !== debouncedModelSearch) {
+        return {
+          ...prev,
+          modelSearch: debouncedModelSearch,
+          page: 1,
+        }
+      }
+      return {
+        ...prev,
+        modelSearch: debouncedModelSearch,
+      }
+    })
+  }, [debouncedModelSearch])
+
+  useEffect(() => {
+    const urlFilters: Filters = {
+      page: Math.max(1, Number(searchParams.get('page') || '1') || 1),
+      modelSearch: searchParams.get('modelSearch') || '',
+      fuel: searchParams.get('fuel') || '',
+      yearRange: parseYearRange(
+        searchParams.get('firstRegistrationYear') || '',
+        DEFAULT_RANGE,
+        CURRENT_YEAR
+      ),
+    }
+
+    setFilters(prev =>
+      prev.page !== urlFilters.page ||
+      prev.modelSearch !== urlFilters.modelSearch ||
+      prev.fuel !== urlFilters.fuel ||
+      prev.yearRange[0] !== urlFilters.yearRange[0] ||
+      prev.yearRange[1] !== urlFilters.yearRange[1]
+        ? urlFilters
+        : prev
+    )
+
+    setRawModelSearch(prev =>
+      prev !== urlFilters.modelSearch ? urlFilters.modelSearch : prev
+    )
+  }, [searchParams])
+
+  useEffect(() => {
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev)
+
+        ;['page', 'fuel', 'firstRegistrationYear', 'modelSearch'].forEach(k =>
+          next.delete(k)
+        )
+
+        next.set('page', String(filters.page))
+        if (filters.fuel) next.set('fuel', filters.fuel)
+        if (firstRegistrationYear)
+          next.set('firstRegistrationYear', firstRegistrationYear)
+        if (filters.modelSearch) next.set('modelSearch', filters.modelSearch)
+
+        return next.toString() === prev.toString() ? prev : next
+      },
+      { replace: true }
+    )
+  }, [
+    filters.page,
+    filters.fuel,
+    filters.modelSearch,
+    firstRegistrationYear,
+    setSearchParams,
+  ])
+
+  useEffect(() => {
+    const params: Record<string, string | number | undefined> = {
+      page: filters.page - 1,
+    }
+    if (filters.fuel) {
+      params.fuel = filters.fuel
+    } else {
+      params.fuel = undefined
+    }
+    if (firstRegistrationYear) {
+      params.firstRegistrationYear = firstRegistrationYear
+    } else {
+      params.firstRegistrationYear = undefined
+    }
+    if (filters.modelSearch) {
+      params.modelSearch = filters.modelSearch
+    } else {
+      params.modelSearch = undefined
+    }
+
+    reload(params)
+  }, [filters, firstRegistrationYear, reload])
+
+  useEffect(() => {
+    if (prevPage.current !== filters.page) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      prevPage.current = filters.page
+    }
+  }, [filters.page])
+
+  useEffect(() => {
+    if (!loading && page && vehicles.length === 0 && page.totalElements > 0) {
+      setFilters(prev => ({ ...prev, page: 1 }))
+    }
+  }, [loading, page, vehicles.length])
+
+  // ========== Event Handlers ==========
+  const handleModelSearchChange = (value: string) => {
+    setRawModelSearch(value)
+  }
+
+  const handleFuelChange = (value: string) => {
+    setFilters(prev => ({ ...prev, fuel: value, page: 1 }))
+  }
+
+  const handleYearRangeChange = (newRange: [number, number]) => {
+    setFilters(prev => ({ ...prev, yearRange: newRange, page: 1 }))
+  }
+
+  const handlePageChange = (
+    _event: React.ChangeEvent<unknown>,
+    value: number
+  ) => {
+    setFilters(prev => ({ ...prev, page: value }))
+  }
+
+  const handleClearFilters = () => {
+    setRawModelSearch('')
+    setFilters({
+      page: 1,
+      modelSearch: '',
+      fuel: '',
+      yearRange: DEFAULT_RANGE,
+    })
+  }
+
+  // Delete handlers
   const handleDeleteClick = (id: number) => {
     setVehicleToDelete(id)
     setDialogOpen(true)
@@ -62,11 +275,8 @@ export default function VehiclesPage() {
       const remainingVehicles = vehicles.filter(v => v.id !== vehicleToDelete)
       setVehicles(remainingVehicles)
 
-      if (remainingVehicles.length === 0 && urlPage > 1 && page) {
-        const newPage = Math.max(1, urlPage - 1)
-        setSearchParams({ page: newPage.toString() }, { replace: true })
-      } else {
-        reload({ page: urlPage - 1 })
+      if (remainingVehicles.length === 0 && filters.page > 1 && page) {
+        setFilters(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))
       }
 
       enqueueSnackbar('Vehicle deleted successfully', { variant: 'success' })
@@ -84,42 +294,6 @@ export default function VehiclesPage() {
     setDialogOpen(false)
     setVehicleToDelete(null)
   }
-
-  const formatFuel = (fuel: string) => {
-    return fuel.charAt(0).toUpperCase() + fuel.slice(1)
-  }
-
-  const handlePageChange = (
-    _event: React.ChangeEvent<unknown>,
-    value: number
-  ) => {
-    setSearchParams({ page: value.toString() })
-  }
-
-  useEffect(() => {
-    if (!searchParams.get('page')) {
-      setSearchParams({ page: '1' }, { replace: true })
-    }
-  }, [searchParams, setSearchParams])
-
-  useEffect(() => {
-    const target = Math.max(1, Number(urlPage) || 1) - 1
-    if (page?.number !== target) {
-      reload({ page: target })
-    }
-  }, [urlPage, page?.number, reload])
-
-  // Scroll to top when page changes
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [urlPage])
-
-  // Redirect to page 1 if current page doesn't exist
-  useEffect(() => {
-    if (!loading && page && vehicles.length === 0 && page.totalElements > 0) {
-      setSearchParams({ page: '1' }, { replace: true })
-    }
-  }, [loading, page, vehicles.length, setSearchParams])
 
   if (loading && vehicles.length === 0) {
     return (
@@ -197,7 +371,7 @@ export default function VehiclesPage() {
             variant="contained"
             color="success"
             startIcon={<span>+</span>}
-            onClick={() => navigate(`/new?fromPage=${urlPage}`)}
+            onClick={() => navigate(`/new?fromPage=${filters.page}`)}
             sx={{
               backgroundColor: '#4caf50',
               '&:hover': {
@@ -209,6 +383,105 @@ export default function VehiclesPage() {
           </Button>
         </Box>
       </Box>
+
+      {/* Filters Section */}
+      <Paper sx={{ p: 3, mb: 3 }}>
+        <Typography
+          variant="h6"
+          sx={{ mb: 2, fontWeight: 'bold', color: '#008080' }}
+        >
+          Filters
+        </Typography>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, 1fr)',
+              md: 'repeat(12, 1fr)',
+            },
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{ gridColumn: { xs: 'span 1', sm: 'span 1', md: 'span 4' } }}
+          >
+            <TextField
+              fullWidth
+              label="Search Model"
+              variant="outlined"
+              value={rawModelSearch}
+              onChange={e => handleModelSearchChange(e.target.value)}
+              placeholder="Enter model name..."
+              size="small"
+            />
+          </Box>
+          <Box
+            sx={{ gridColumn: { xs: 'span 1', sm: 'span 1', md: 'span 3' } }}
+          >
+            <FormControl fullWidth size="small">
+              <InputLabel id="fuel-filter-label">Fuel Type</InputLabel>
+              <Select
+                labelId="fuel-filter-label"
+                id="fuel-filter"
+                value={filters.fuel}
+                label="Fuel Type"
+                onChange={e => handleFuelChange(e.target.value)}
+              >
+                <MenuItem value="">
+                  <em>All</em>
+                </MenuItem>
+                <MenuItem value="diesel">Diesel</MenuItem>
+                <MenuItem value="petrol">Petrol</MenuItem>
+                <MenuItem value="hybrid">Hybrid</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          <Box
+            sx={{
+              gridColumn: { xs: 'span 1', sm: 'span 1', md: 'span 3' },
+              px: 1,
+            }}
+          >
+            <Typography
+              id="year-range-slider"
+              gutterBottom
+              sx={{ fontSize: '0.875rem', mb: 1 }}
+            >
+              Registration Year: {sliderYearRange[0]} - {sliderYearRange[1]}
+            </Typography>
+            <Slider
+              value={sliderYearRange}
+              onChange={(_, newValue) => {
+                // Only update visual state during dragging, no API call
+                setSliderYearRange(newValue as [number, number])
+              }}
+              onChangeCommitted={(_, newValue) => {
+                // Commit: update filters and trigger API call
+                handleYearRangeChange(newValue as [number, number])
+              }}
+              valueLabelDisplay="auto"
+              min={1900}
+              max={CURRENT_YEAR}
+              aria-labelledby="year-range-slider"
+              marks={marks}
+            />
+          </Box>
+          <Box
+            sx={{ gridColumn: { xs: 'span 1', sm: 'span 2', md: 'span 2' } }}
+          >
+            <Button
+              fullWidth
+              variant="outlined"
+              color="secondary"
+              onClick={handleClearFilters}
+              sx={{ height: '40px' }}
+            >
+              Clear Filters
+            </Button>
+          </Box>
+        </Box>
+      </Paper>
 
       {page && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -267,7 +540,7 @@ export default function VehiclesPage() {
                         color="primary"
                         size="small"
                         onClick={() =>
-                          navigate(`/${vehicle.id}?fromPage=${urlPage}`)
+                          navigate(`/${vehicle.id}?fromPage=${filters.page}`)
                         }
                         sx={{
                           backgroundColor: '#2196f3',
@@ -308,7 +581,7 @@ export default function VehiclesPage() {
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
           <Pagination
             count={page.totalPages}
-            page={urlPage}
+            page={filters.page}
             onChange={handlePageChange}
             color="primary"
             size="large"
@@ -434,7 +707,8 @@ export default function VehiclesPage() {
                   variant: 'success',
                 })
                 setSeedOpen(false)
-                reload({ page: urlPage - 1 })
+                // Trigger reload by updating filters (page stays the same)
+                setFilters(prev => ({ ...prev }))
               } catch {
                 // errors are already shown via axios interceptor
               } finally {
