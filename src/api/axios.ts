@@ -12,8 +12,26 @@ api.interceptors.response.use(
   error => {
     const data = error?.response?.data as ApiError | undefined
 
+    // Check for connection refused error
+    const isConnectionRefused =
+      error?.code === 'ERR_NETWORK' ||
+      error?.message?.includes('ERR_CONNECTION_REFUSED') ||
+      error?.message?.includes('Network Error')
+
+    // Determine error message
+    let errorMessage: string
+    if (isConnectionRefused) {
+      errorMessage = 'Server is down, please start the server'
+    } else if (data?.detail) {
+      errorMessage = data.detail
+    } else if (error?.message) {
+      errorMessage = error.message
+    } else {
+      errorMessage = 'Unknown error'
+    }
+
     // Show error via notistack
-    enqueueSnackbar(data?.detail ?? error?.message ?? 'Unknown error', {
+    enqueueSnackbar(errorMessage, {
       variant: 'error',
     })
 
@@ -27,7 +45,9 @@ api.interceptors.response.use(
       type: 'about:blank',
       title: 'Error',
       status: error?.response?.status ?? 500,
-      detail: error?.message ?? 'Unknown error',
+      detail: isConnectionRefused
+        ? 'Server is down, please start the server'
+        : (error?.message ?? 'Unknown error'),
       instance: '',
       code: 'INTERNAL_ERROR',
       traceId: '',
