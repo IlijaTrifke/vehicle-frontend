@@ -1,11 +1,14 @@
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useSnackbar } from 'notistack'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
+  Alert,
   Box,
   Button,
+  CircularProgress,
   Container,
   FormControl,
   FormHelperText,
@@ -15,7 +18,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useCreateVehicle } from '../hooks/useCreateVehicle'
+import { useVehicle } from '../hooks/useVehicle'
+import { useUpdateVehicle } from '../hooks/useUpdateVehicle'
 import type { VehicleRequest, Fuel } from '../types/vehicle'
 
 const vehicleSchema = z.object({
@@ -42,13 +46,20 @@ const vehicleSchema = z.object({
 
 type VehicleFormData = z.infer<typeof vehicleSchema>
 
-export default function NewVehiclePage() {
+export default function EditVehiclePage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { id } = useParams<{ id: string }>()
+  const vehicleId = id ? parseInt(id, 10) : 0
   const { enqueueSnackbar } = useSnackbar()
-  const { create, loading, error } = useCreateVehicle()
-
-  const fromPage = searchParams.get('fromPage') || '1'
+  const fromPage = parseInt(searchParams.get('fromPage') || '1', 10)
+  const {
+    vehicle,
+    loading: loadingVehicle,
+    error: vehicleError,
+    notFound,
+  } = useVehicle(vehicleId)
+  const { update, loading: updating, error: updateError } = useUpdateVehicle()
 
   const {
     register,
@@ -56,6 +67,7 @@ export default function NewVehiclePage() {
     formState: { errors },
     setValue,
     watch,
+    reset,
   } = useForm<VehicleFormData>({
     resolver: zodResolver(vehicleSchema),
     defaultValues: {
@@ -69,6 +81,26 @@ export default function NewVehiclePage() {
 
   const fuelValue = watch('fuel')
 
+  // Populate form when vehicle data is loaded
+  useEffect(() => {
+    if (vehicle) {
+      reset({
+        model: vehicle.model,
+        firstRegistrationYear: vehicle.firstRegistrationYear,
+        cubicCapacity: vehicle.cubicCapacity,
+        fuel: vehicle.fuel,
+        mileage: vehicle.mileage,
+      })
+    }
+  }, [vehicle, reset])
+
+  // Handle not found error
+  useEffect(() => {
+    if (notFound || (vehicleError && vehicleError.status === 404)) {
+      navigate(`/?page=${fromPage}`)
+    }
+  }, [notFound, vehicleError, enqueueSnackbar, navigate, fromPage])
+
   const onSubmit = async (data: VehicleFormData) => {
     const payload: VehicleRequest = {
       model: data.model,
@@ -78,20 +110,48 @@ export default function NewVehiclePage() {
       mileage: data.mileage,
     }
 
-    const created = await create(payload)
-    if (created) {
-      enqueueSnackbar('Vehicle created successfully', { variant: 'success' })
+    const updated = await update(vehicleId, payload)
+    if (updated) {
+      enqueueSnackbar('Vehicle updated successfully', { variant: 'success' })
       navigate(`/?page=${fromPage}`)
-    } else if (error) {
-      enqueueSnackbar(error.detail || error.title || 'Error creating vehicle', {
-        variant: 'error',
-      })
-      if (error.errors) {
-        Object.entries(error.errors).forEach(([field, message]) => {
+    } else if (updateError) {
+      enqueueSnackbar(
+        updateError.detail || updateError.title || 'Error updating vehicle',
+        { variant: 'error' }
+      )
+      if (updateError.errors) {
+        Object.entries(updateError.errors).forEach(([field, message]) => {
           enqueueSnackbar(`${field}: ${message}`, { variant: 'error' })
         })
       }
     }
+  }
+
+  if (loadingVehicle) {
+    return (
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        minHeight="50vh"
+      >
+        <CircularProgress />
+      </Box>
+    )
+  }
+
+  if (vehicleError && !notFound) {
+    return (
+      <Container maxWidth="md">
+        <Alert severity="error" sx={{ mt: 3 }}>
+          {vehicleError.detail || vehicleError.title || 'Error loading vehicle'}
+        </Alert>
+      </Container>
+    )
+  }
+
+  if (notFound) {
+    return null
   }
 
   return (
@@ -105,14 +165,14 @@ export default function NewVehiclePage() {
         }}
       >
         <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
-          New vehicle
+          Edit vehicle
         </Typography>
         <Button
           variant="contained"
           color="success"
           type="submit"
           form="vehicle-form"
-          loading={loading}
+          loading={updating}
           sx={{
             backgroundColor: '#4caf50',
             '&:hover': {
@@ -144,7 +204,7 @@ export default function NewVehiclePage() {
             fullWidth
             error={!!errors.model}
             helperText={errors.model?.message}
-            disabled={loading}
+            disabled={updating}
           />
 
           <TextField
@@ -153,7 +213,7 @@ export default function NewVehiclePage() {
             fullWidth
             error={!!errors.firstRegistrationYear}
             helperText={errors.firstRegistrationYear?.message}
-            disabled={loading}
+            disabled={updating}
             slotProps={{ htmlInput: { maxLength: 4 } }}
           />
 
@@ -164,11 +224,11 @@ export default function NewVehiclePage() {
             fullWidth
             error={!!errors.cubicCapacity}
             helperText={errors.cubicCapacity?.message}
-            disabled={loading}
+            disabled={updating}
             slotProps={{ htmlInput: { min: 1, max: 9999 } }}
           />
 
-          <FormControl fullWidth error={!!errors.fuel} disabled={loading}>
+          <FormControl fullWidth error={!!errors.fuel} disabled={updating}>
             <InputLabel>Fuel</InputLabel>
             <Select
               value={fuelValue || ''}
@@ -195,7 +255,7 @@ export default function NewVehiclePage() {
             fullWidth
             error={!!errors.mileage}
             helperText={errors.mileage?.message}
-            disabled={loading}
+            disabled={updating}
             slotProps={{ htmlInput: { min: 0, max: 9999999 } }}
           />
         </Box>

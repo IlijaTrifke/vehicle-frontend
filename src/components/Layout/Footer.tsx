@@ -1,24 +1,29 @@
-import { Box, Typography } from '@mui/material'
+import { Box, Container, Typography } from '@mui/material'
 
 export function Footer() {
+  const currentYear = new Date().getFullYear()
+
   return (
     <Box
       sx={{
-        backgroundColor: '#E0E0E0', // light gray
-        padding: '1rem 0',
+        backgroundColor: '#008080',
+        py: 3,
         marginTop: 'auto',
+        boxShadow: '0 -4px 6px rgba(0,0,0,0.1)',
       }}
     >
-      <Typography
-        variant="body1"
-        component="div"
-        sx={{
-          textAlign: 'center',
-          color: 'black',
-        }}
-      >
-        Footer
-      </Typography>
+      <Container maxWidth="xl">
+        {/* Copyright */}
+        <Typography
+          variant="body2"
+          sx={{
+            textAlign: 'center',
+            color: '#BDC3C7',
+          }}
+        >
+          © {currentYear} Vehicle Manager
+        </Typography>
+      </Container>
     </Box>
   )
 }
