@@ -1,6 +1,5 @@
 # 🚗 Vehicle Frontend
 
-A **React + TypeScript** application developed as part of the Mühlbauer technical assignment.  
 The project delivers full **Create, Read, Update, Delete (CRUD)** functionality through a modern, responsive user interface that follows clean architecture principles and best practices.
 
 ---
@@ -254,5 +253,3 @@ The frontend expects error responses in the following format (matching backend):
 - All API requests are configured through the centralized Axios instance in `src/api/axios.ts`.
 
 ---
-
-© 2025 — Developed by **Ilija Trifunović** as part of the Mühlbauer interview assignment.
